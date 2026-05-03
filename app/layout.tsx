@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import ServiceWorkerRegister from "./components/ServiceWorkerRegister";
 import Navigation from "./components/Navigation";
+import SyncInitializer from "./components/SyncInitializer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -109,6 +110,7 @@ export default function RootLayout({
 
       <body className="min-h-full flex flex-col bg-slate-900">
         <ServiceWorkerRegister />
+        <SyncInitializer />
         <Navigation />
         <main className="flex-1">
           {children}
