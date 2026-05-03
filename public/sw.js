@@ -1,8 +1,8 @@
 // public/sw.js
 const CACHE_NAME = "bbms-offline-v1";
 
-// Add every JS/CSS chunk Next.js generates + the root page
-const APP_SHELL = ["/"];
+// App shell URLs to cache
+const APP_SHELL = ["/", "/donors", "/visits", "/sync"];
 
 // ── Install: cache the app shell ──────────────────────────────
 self.addEventListener("install", (event) => {
@@ -28,6 +28,31 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// ── Message handler: trigger background sync ─────────────────
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "TRIGGER_SYNC") {
+    // Notify all clients that sync is available
+    self.clients.matchAll().then((clients) => {
+      clients.forEach((client) => {
+        client.postMessage({ type: "SYNC_AVAILABLE" });
+      });
+    });
+  }
+});
+
+// ── Background Sync: sync queue when back online ───────────
+self.addEventListener("sync", (event) => {
+  if (event.tag === "bbms-sync-queue") {
+    event.waitUntil(
+      self.clients.matchAll().then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({ type: "SYNC_QUEUE" });
+        });
+      })
+    );
+  }
+});
+
 // ── Fetch: Network first, fall back to cache ─────────────────
 self.addEventListener("fetch", (event) => {
   // Only handle GET requests
@@ -36,8 +61,28 @@ self.addEventListener("fetch", (event) => {
   // Skip cross-origin requests (analytics, fonts CDN etc.)
   if (!event.request.url.startsWith(self.location.origin)) return;
 
-  // For API calls → network only, never cache
-  if (event.request.url.includes("/api/")) return;
+  // For API calls → stale-while-revalidate (cache then update)
+  if (event.request.url.includes("/api/")) {
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        const fetchPromise = fetch(event.request).then((networkResponse) => {
+          if (networkResponse.ok) {
+            const clone = networkResponse.clone();
+            caches
+              .open(CACHE_NAME)
+              .then((cache) => cache.put(event.request, clone));
+          }
+          return networkResponse;
+        }).catch(() => {
+          // If network fails, return cached if available
+          return cachedResponse;
+        });
+        // Return cached first if available, otherwise wait for network
+        return cachedResponse || fetchPromise;
+      })
+    );
+    return;
+  }
 
   event.respondWith(
     fetch(event.request)

@@ -1,228 +1,222 @@
 "use client";
 
-export default function Home() {
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { getDatabaseStats, getAllDonors, getVisitsWithDonor } from './lib/db';
+import { getSyncStats } from './lib/sync';
+import { subscribeToNetwork } from './lib/network';
+import type { SyncStatus } from './lib/types';
+import NetworkStatus from './components/NetworkStatus';
+import SyncStatusBadge from './components/SyncStatusBadge';
+
+export default function Dashboard() {
+  const [stats, setStats] = useState({
+    donors: { total: 0, synced: 0, pending: 0 },
+    visits: { total: 0, synced: 0, pending: 0 },
+    queue: { total: 0 },
+    lastSync: null as number | null,
+  });
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [isOnline, setIsOnline] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    loadDashboardData();
+    
+    const unsubscribe = subscribeToNetwork((state) => {
+      setIsOnline(state.isOnline && !state.isForcedOffline);
+    });
+
+    // Refresh every 10 seconds
+    const interval = setInterval(loadDashboardData, 10000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, []);
+
+  const loadDashboardData = async () => {
+    try {
+      const [dbStats, syncStats, donors, visits] = await Promise.all([
+        getDatabaseStats(),
+        getSyncStats(),
+        getAllDonors(),
+        getVisitsWithDonor(),
+      ]);
+
+      setStats({
+        donors: dbStats.donors,
+        visits: dbStats.visits,
+        queue: dbStats.queue,
+        lastSync: syncStats.lastSyncAt,
+      });
+
+      // Get recent activity (last 5 items)
+      const recentDonors = donors
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, 3)
+        .map(d => ({ type: 'donor', name: `${d.firstName} ${d.lastName}`, date: d.createdAt, status: d.syncStatus }));
+
+      const recentVisits = visits
+        .sort((a, b) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime())
+        .slice(0, 3)
+        .map(v => ({ 
+          type: 'visit', 
+          name: v.donor ? `${v.donor.firstName} ${v.donor.lastName}` : 'Unknown', 
+          date: new Date(v.visitDate).getTime(),
+          status: v.syncStatus 
+        }));
+
+      setRecentActivity([...recentDonors, ...recentVisits].sort((a, b) => b.date - a.date).slice(0, 5));
+    } catch (error) {
+      console.error('Failed to load dashboard:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const formatTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(hours / 24);
+    
+    if (hours < 1) return 'Just now';
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    return date.toLocaleDateString();
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-white">
-      {/* Navigation */}
-      <nav className="fixed top-0 w-full backdrop-blur-md bg-slate-900/80 border-b border-slate-700 z-50">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-            BBMS
-          </div>
-          <div className="flex gap-4">
-            <button className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors">
-              Features
-            </button>
-            <button className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors">
-              About
-            </button>
-            <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors font-medium">
-              Get Started
-            </button>
-          </div>
+    <div className="min-h-screen bg-slate-900 text-white py-8">
+      <div className="max-w-6xl mx-auto px-6">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <p className="text-slate-400 mt-2">Blood Bank Management System Overview</p>
         </div>
-      </nav>
 
-      {/* Hero Section */}
-      <div className="pt-32 pb-20 px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-12">
-            <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
-              Welcome to{" "}
-              <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-                BBMS
-              </span>
-            </h1>
-            <p className="text-xl text-slate-300 max-w-2xl mx-auto mb-8">
-              Blood Bank Management System with offline support. Manage blood
-              inventory, donations, and requests efficiently.
-            </p>
-            <div className="flex gap-4 justify-center">
-              <button className="px-8 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors">
-                Start Now
-              </button>
-              <button className="px-8 py-3 border border-slate-600 hover:border-slate-400 rounded-lg font-medium transition-colors">
-                Learn More
-              </button>
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <Link href="/donors" className="bg-slate-800 p-6 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors">
+            <div className="text-3xl font-bold text-white">{isLoading ? '-' : stats.donors.total}</div>
+            <div className="text-slate-400 text-sm mt-1">Total Donors</div>
+            <div className="flex items-center gap-2 mt-2 text-xs">
+              <span className="text-green-400">{stats.donors.synced} synced</span>
+              <span className="text-slate-600">|</span>
+              <span className="text-yellow-400">{stats.donors.pending} pending</span>
             </div>
-          </div>
-        </div>
-      </div>
+          </Link>
 
-      {/* Stats Section */}
-      <div className="py-12 px-6 border-y border-slate-700">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8">
-          <div className="text-center">
-            <div className="text-4xl font-bold text-blue-400 mb-2">10K+</div>
-            <div className="text-slate-400">Users</div>
-          </div>
-          <div className="text-center">
-            <div className="text-4xl font-bold text-cyan-400 mb-2">5K+</div>
-            <div className="text-slate-400">Donations</div>
-          </div>
-          <div className="text-center">
-            <div className="text-4xl font-bold text-blue-400 mb-2">50+</div>
-            <div className="text-slate-400">Blood Banks</div>
-          </div>
-          <div className="text-center">
-            <div className="text-4xl font-bold text-cyan-400 mb-2">99%</div>
-            <div className="text-slate-400">Uptime</div>
-          </div>
-        </div>
-      </div>
+          <Link href="/visits" className="bg-slate-800 p-6 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors">
+            <div className="text-3xl font-bold text-white">{isLoading ? '-' : stats.visits.total}</div>
+            <div className="text-slate-400 text-sm mt-1">Total Visits</div>
+            <div className="flex items-center gap-2 mt-2 text-xs">
+              <span className="text-green-400">{stats.visits.synced} synced</span>
+              <span className="text-slate-600">|</span>
+              <span className="text-yellow-400">{stats.visits.pending} pending</span>
+            </div>
+          </Link>
 
-      {/* Features Section */}
-      <div className="py-20 px-6">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl font-bold text-center mb-12">Key Features</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              {
-                title: "Offline Support",
-                desc: "Work seamlessly even without internet connection",
-              },
-              {
-                title: "Real-time Updates",
-                desc: "Sync data instantly when back online",
-              },
-              {
-                title: "Inventory Management",
-                desc: "Track blood stock and availability",
-              },
-              {
-                title: "Donation Tracking",
-                desc: "Complete donor and donation history",
-              },
-              {
-                title: "Request Management",
-                desc: "Handle emergency requests efficiently",
-              },
-              {
-                title: "Analytics Dashboard",
-                desc: "Comprehensive insights and reporting",
-              },
-            ].map((feature, idx) => (
-              <div
-                key={idx}
-                className="p-6 rounded-lg bg-slate-800/50 border border-slate-700 hover:border-slate-600 transition-colors hover:bg-slate-800/70"
-              >
-                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center mb-4">
-                  <span className="text-lg font-bold">{idx + 1}</span>
-                </div>
-                <h3 className="text-lg font-semibold mb-2">{feature.title}</h3>
-                <p className="text-slate-400">{feature.desc}</p>
+          <Link href="/sync" className="bg-slate-800 p-6 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors">
+            <div className={`text-3xl font-bold ${stats.queue.total > 0 ? 'text-yellow-400' : 'text-green-400'}`}>
+              {isLoading ? '-' : stats.queue.total}
+            </div>
+            <div className="text-slate-400 text-sm mt-1">Sync Queue</div>
+            <div className="mt-2 text-xs text-slate-500">
+              {stats.lastSync ? `Last: ${formatTime(stats.lastSync)}` : 'Never synced'}
+            </div>
+          </Link>
+
+          <div className={`p-6 rounded-lg border transition-colors ${isOnline ? 'bg-green-900/20 border-green-700' : 'bg-red-900/20 border-red-700'}`}>
+            <div className="flex items-center justify-between">
+              <div className={`text-3xl font-bold ${isOnline ? 'text-green-400' : 'text-red-400'}`}>
+                {isOnline ? 'Online' : 'Offline'}
               </div>
-            ))}
+              <NetworkStatus />
+            </div>
+            <div className={`text-sm mt-1 ${isOnline ? 'text-green-400' : 'text-red-400'}`}>
+              {isOnline ? 'Ready to sync' : 'Working offline'}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* CTA Section */}
-      <div className="py-20 px-6 bg-slate-800/50 border-y border-slate-700">
-        <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-4xl font-bold mb-6">
-            Ready to Transform Blood Bank Management?
-          </h2>
-          <p className="text-xl text-slate-300 mb-8">
-            Join thousands of blood banks worldwide using BBMS for efficient
-            donation and inventory management.
+        {/* Quick Actions */}
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
+          <div className="flex flex-wrap gap-3">
+            <Link href="/donors/new" className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors flex items-center gap-2">
+              <span>+</span>
+              <span>New Donor</span>
+            </Link>
+            <Link href="/visits/new" className="px-6 py-3 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition-colors flex items-center gap-2">
+              <span>+</span>
+              <span>Record Visit</span>
+            </Link>
+            <Link href="/sync" className="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors flex items-center gap-2">
+              <span>↻</span>
+              <span>Sync Now</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* Recent Activity */}
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold mb-4">Recent Activity</h2>
+          {isLoading ? (
+            <div className="bg-slate-800 p-8 rounded-lg border border-slate-700 text-center">
+              <div className="inline-block w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <span className="ml-2 text-slate-400">Loading...</span>
+            </div>
+          ) : recentActivity.length === 0 ? (
+            <div className="bg-slate-800 p-8 rounded-lg border border-slate-700 text-center">
+              <p className="text-slate-400">No recent activity</p>
+              <p className="text-slate-500 text-sm mt-2">Add a donor or record a visit to get started</p>
+              <div className="flex gap-3 justify-center mt-4">
+                <Link href="/donors/new" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm">
+                  Add Donor
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+              {recentActivity.map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between px-6 py-4 border-b border-slate-700/50 last:border-b-0">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                      item.type === 'donor' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'
+                    }`}>
+                      {item.type === 'donor' ? 'D' : 'V'}
+                    </div>
+                    <div>
+                      <div className="font-medium text-white">{item.name}</div>
+                      <div className="text-sm text-slate-400 capitalize">{item.type} added {formatTime(item.date)}</div>
+                    </div>
+                  </div>
+                  <SyncStatusBadge status={item.status as SyncStatus} size="sm" />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Offline Info */}
+        <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-700">
+          <h3 className="font-semibold text-blue-400 mb-2">Offline-First Architecture</h3>
+          <p className="text-slate-400 text-sm">
+            This prototype demonstrates offline-first functionality. All data is stored locally in IndexedDB 
+            and synchronized with the server when online. You can continue working offline and sync later.
           </p>
-          <button className="px-10 py-4 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 rounded-lg font-semibold text-lg transition-all transform hover:scale-105">
-            Get Started Today
-          </button>
+          <div className="flex gap-4 mt-4 text-xs text-slate-500">
+            <span>✓ Works offline</span>
+            <span>✓ Auto-sync when online</span>
+            <span>✓ Queue-based sync</span>
+            <span>✓ Conflict resolution</span>
+          </div>
         </div>
       </div>
-
-      {/* Footer */}
-      <footer className="py-12 px-6 border-t border-slate-700">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <h3 className="font-semibold mb-4">Product</h3>
-              <ul className="space-y-2 text-slate-400">
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Features
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Pricing
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Security
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold mb-4">Company</h3>
-              <ul className="space-y-2 text-slate-400">
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    About
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Blog
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Contact
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold mb-4">Resources</h3>
-              <ul className="space-y-2 text-slate-400">
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Documentation
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Support
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    FAQ
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold mb-4">Legal</h3>
-              <ul className="space-y-2 text-slate-400">
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Privacy
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Terms
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    License
-                  </a>
-                </li>
-              </ul>
-            </div>
-          </div>
-          <div className="border-t border-slate-700 pt-8 text-center text-slate-400">
-            <p>&copy; 2026 BBMS. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
