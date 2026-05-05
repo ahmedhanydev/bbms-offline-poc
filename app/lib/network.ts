@@ -105,12 +105,12 @@ export function toggleForcedOffline(): boolean {
 }
 
 // Check server connectivity (ping endpoint)
-export async function checkServerConnection(serverUrl: string = 'http://localhost:3001'): Promise<boolean> {
+export async function checkServerConnection(serverUrl: string = 'https://api-57357stag.57357.org'): Promise<boolean> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
     
-    const response = await fetch(`${serverUrl}/api/health`, {
+    const response = await fetch(`${serverUrl}/api/v1/health`, {
       method: 'GET',
       signal: controller.signal,
     });

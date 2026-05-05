@@ -27,7 +27,7 @@ import {
 import { isOnline, checkServerConnection } from './network';
 import { v4 as uuidv4 } from 'uuid';
 
-const SERVER_URL = 'http://localhost:3001';
+const SERVER_URL = 'https://api-57357stag.57357.org';
 const MAX_RETRIES = 5;
 const RETRY_DELAY_BASE = 2000; // 2 seconds base delay
 
@@ -212,7 +212,6 @@ async function syncQueueItem(item: SyncQueueItem): Promise<{
 // Sync donor to server
 async function syncDonor(item: SyncQueueItem): Promise<{
   success: boolean;
-  error?: string;
   conflict?: SyncConflict;
 }> {
   const donor: Donor = JSON.parse(item.payload);
@@ -221,8 +220,8 @@ async function syncDonor(item: SyncQueueItem): Promise<{
   try {
     const isUpdate = item.operation === 'UPDATE' && donor.remoteId;
     const url = isUpdate 
-      ? `${SERVER_URL}/api/donors/${donor.remoteId}`
-      : `${SERVER_URL}/api/donors`;
+      ? `${SERVER_URL}/api/v1/donors/${donor.remoteId}`
+      : `${SERVER_URL}/api/v1/donors`;
     const method = isUpdate ? 'PUT' : 'POST';
 
     const response = await fetch(url, {
@@ -264,17 +263,13 @@ async function syncDonor(item: SyncQueueItem): Promise<{
     return { success: true };
 
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
-    };
+    return { success: false };
   }
 }
 
 // Sync visit to server
 async function syncVisit(item: SyncQueueItem): Promise<{
   success: boolean;
-  error?: string;
   conflict?: SyncConflict;
 }> {
   const visit: Visit = JSON.parse(item.payload);
@@ -283,7 +278,7 @@ async function syncVisit(item: SyncQueueItem): Promise<{
   // Get the donor to check remoteId
   const donor = await db.get('donors', visit.donorLocalId);
   if (!donor || !donor.remoteId) {
-    return { success: false, error: 'Donor not synced yet' };
+    return { success: false };
   }
 
   // Update visit with donor's remoteId
@@ -295,8 +290,8 @@ async function syncVisit(item: SyncQueueItem): Promise<{
   try {
     const isUpdate = item.operation === 'UPDATE' && visit.remoteId;
     const url = isUpdate
-      ? `${SERVER_URL}/api/visits/${visit.remoteId}`
-      : `${SERVER_URL}/api/visits`;
+      ? `${SERVER_URL}/api/v1/visits/${visit.remoteId}`
+      : `${SERVER_URL}/api/v1/visits`;
     const method = isUpdate ? 'PUT' : 'POST';
 
     const response = await fetch(url, {
@@ -338,10 +333,7 @@ async function syncVisit(item: SyncQueueItem): Promise<{
     return { success: true };
 
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
-    };
+    return { success: false };
   }
 }
 
@@ -425,7 +417,7 @@ export async function resolveConflict(
   if (conflict.entityType === 'donor') {
     if (preferLocal) {
       // Force update to server
-      await fetch(`${SERVER_URL}/api/donors/${(conflict.localData as Donor).remoteId}`, {
+      await fetch(`${SERVER_URL}/api/v1/donors/${(conflict.localData as Donor).remoteId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -443,7 +435,7 @@ export async function resolveConflict(
     }
   } else {
     if (preferLocal) {
-      await fetch(`${SERVER_URL}/api/visits/${(conflict.localData as Visit).remoteId}`, {
+      await fetch(`${SERVER_URL}/api/v1/visits/${(conflict.localData as Visit).remoteId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
