@@ -7,15 +7,23 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getAllDonors } from '../lib/db';
 import { Donor } from '../lib/types';
+import { fetchDonorsFromServer } from '../lib/sync';
+import { isOnline } from '../lib/network';
 import SyncStatusBadge from '../components/SyncStatusBadge';
 
 export default function DonorsPage() {
   const [donors, setDonors] = useState<Donor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'pending' | 'synced' | 'failed'>('all');
 
   useEffect(() => {
     loadDonors();
+
+    // Auto-fetch from server on mount if online
+    if (isOnline()) {
+      handleSyncFromServer();
+    }
 
     // Poll every 3 seconds to catch new donors and sync status changes
     const interval = setInterval(() => {
@@ -24,6 +32,23 @@ export default function DonorsPage() {
 
     return () => clearInterval(interval);
   }, []);
+
+  const handleSyncFromServer = async () => {
+    setIsSyncing(true);
+    try {
+      const result = await fetchDonorsFromServer();
+      if (result.success) {
+        console.log('[DonorsPage] Synced', result.count, 'donors from server');
+        loadDonors();
+      } else {
+        console.error('[DonorsPage] Server sync failed:', result.error);
+      }
+    } catch (err) {
+      console.error('[DonorsPage] Sync error:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const loadDonors = async () => {
     try {
@@ -59,13 +84,30 @@ export default function DonorsPage() {
             <h1 className="text-3xl font-bold">Donors</h1>
             <p className="text-slate-400 mt-1">Manage blood donors and their information</p>
           </div>
-          <Link
-            href="/donors/new"
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors flex items-center gap-2"
-          >
-            <span>+</span>
-            <span>New Donor</span>
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/donors/server"
+              className="px-4 py-3 bg-emerald-600 hover:bg-emerald-700 rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              <span>🔍</span>
+              <span>Search Server Donors</span>
+            </Link>
+            <button
+              onClick={handleSyncFromServer}
+              disabled={isSyncing}
+              className="px-4 py-3 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              <span>{isSyncing ? '⟳' : '↓'}</span>
+              <span>{isSyncing ? 'Syncing...' : 'Sync from Server'}</span>
+            </button>
+            <Link
+              href="/donors/new"
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              <span>+</span>
+              <span>New Donor</span>
+            </Link>
+          </div>
         </div>
 
         {/* Stats */}

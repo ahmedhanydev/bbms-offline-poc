@@ -155,6 +155,28 @@ export async function getDonorSummaries(): Promise<DonorSummary[]> {
   }));
 }
 
+// Search donors by text across name, donorNumber, city, phone, nationalId, bloodType
+export async function searchDonors(query: string): Promise<Donor[]> {
+  const db = await initDB();
+  const allDonors = await db.getAll('donors');
+  const q = query.toLowerCase().trim();
+  if (!q) return allDonors;
+
+  return allDonors.filter(d => {
+    const searchable = [
+      d.firstName,
+      d.lastName,
+      d.donorNumber,
+      d.city,
+      d.phone,
+      d.nationalId,
+      d.bloodType,
+      d.address,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return searchable.includes(q);
+  });
+}
+
 export async function deleteDonor(localId: string): Promise<void> {
   const db = await initDB();
   await db.delete('donors', localId);

@@ -49,6 +49,82 @@ export function setSyncCallbacks(cb: SyncCallbacks): void {
   callbacks = { ...callbacks, ...cb };
 }
 
+// ==================== FETCH FROM SERVER ====================
+
+// Fetch all donors from server and store in IndexedDB for offline use
+export async function fetchDonorsFromServer(): Promise<{
+  success: boolean;
+  count: number;
+  error?: string;
+}> {
+  try {
+    const allDonors: Donor[] = [];
+    let currentPage = 1;
+    let lastPage = 1;
+
+    do {
+      const response = await axios.get(`${SERVER_URL}/api/v1/donors?page=${currentPage}`);
+      const pageData = response.data.data || response.data;
+      const donors = pageData.data || pageData;
+      const meta = pageData.current_page !== undefined ? pageData : null;
+
+      if (meta) {
+        lastPage = meta.last_page || 1;
+      }
+
+      for (const d of donors) {
+        // Map snake_case server fields to camelCase Donor type
+        const donor: Donor = {
+          localId: d.local_id || uuidv4(),
+          remoteId: d.id || null,
+          donorNumber: d.donor_number || '',
+          nationalId: d.national_id || '',
+          firstName: d.first_name || '',
+          lastName: d.last_name || '',
+          dateOfBirth: d.date_of_birth ? d.date_of_birth.split('T')[0] : '',
+          gender: d.gender || 'male',
+          bloodType: d.blood_type || 'A+',
+          phone: d.phone || '',
+          email: d.email || '',
+          address: d.address || '',
+          city: d.city || '',
+          emergencyContactName: d.emergency_contact_name || '',
+          emergencyContactPhone: d.emergency_contact_phone || '',
+          lastDonationDate: d.last_donation_date ? d.last_donation_date.split('T')[0] : null,
+          totalDonations: d.total_donations || 0,
+          isEligible: d.is_eligible !== undefined ? d.is_eligible : true,
+          notes: d.notes || '',
+          syncStatus: 'synced',
+          version: d.version || 1,
+          createdAt: d.created_at ? new Date(d.created_at).getTime() : Date.now(),
+          updatedAt: d.updated_at ? new Date(d.updated_at).getTime() : Date.now(),
+        };
+        allDonors.push(donor);
+      }
+
+      currentPage++;
+    } while (currentPage <= lastPage);
+
+    // Store all in IndexedDB
+    const db = await initDB();
+    const tx = db.transaction('donors', 'readwrite');
+    for (const donor of allDonors) {
+      tx.store.put(donor);
+    }
+    await tx.done;
+
+    console.log('[Sync] Fetched', allDonors.length, 'donors from server');
+    return { success: true, count: allDonors.length };
+  } catch (error) {
+    console.error('[Sync] Failed to fetch donors from server:', error);
+    return {
+      success: false,
+      count: 0,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 // ==================== QUEUE OPERATIONS ====================
 
 // Queue a donor for sync
