@@ -26,6 +26,7 @@ import {
 } from './db';
 import { isOnline, checkServerConnection } from './network';
 import { v4 as uuidv4 } from 'uuid';
+import axios from 'axios';
 
 const SERVER_URL = 'https://api-57357stag.57357.org';
 const MAX_RETRIES = 5;
@@ -198,7 +199,7 @@ async function syncQueueItem(item: SyncQueueItem): Promise<{
       return { success: false, conflict: result.conflict };
     } else {
       // Retry logic
-      await handleSyncFailure(item, result.error || 'Unknown error');
+      await handleSyncFailure(item, 'Sync failed');
       return { success: false };
     }
 
@@ -224,15 +225,17 @@ async function syncDonor(item: SyncQueueItem): Promise<{
       : `${SERVER_URL}/api/v1/donors`;
     const method = isUpdate ? 'PUT' : 'POST';
 
-    const response = await fetch(url, {
+    const response = await axios({
+      url,
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(donor),
+      data: donor,
+      validateStatus: () => true,
     });
 
     if (response.status === 409) {
       // Conflict detected
-      const serverData = await response.json();
+      const serverData = response.data;
       const conflict: SyncConflict = {
         id: uuidv4(),
         entityType: 'donor',
@@ -246,23 +249,26 @@ async function syncDonor(item: SyncQueueItem): Promise<{
       return { success: false, conflict };
     }
 
-    if (!response.ok) {
+    if (response.status < 200 || response.status >= 300) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const serverDonor: Donor = await response.json();
+    const serverResponse = response.data;
+    const serverDonor = serverResponse.data || serverResponse;
     
     // Update local record with server data
+    // API uses 'id' as remoteId, and response may not have 'version'
     await db.put('donors', {
       ...donor,
-      remoteId: serverDonor.remoteId,
+      remoteId: serverDonor.id || serverDonor.remoteId,
       syncStatus: 'synced',
-      version: serverDonor.version,
+      version: serverDonor.version || 1,
     });
 
     return { success: true };
 
   } catch (error) {
+    console.error('[Sync] syncDonor failed:', error);
     return { success: false };
   }
 }
@@ -294,14 +300,16 @@ async function syncVisit(item: SyncQueueItem): Promise<{
       : `${SERVER_URL}/api/v1/visits`;
     const method = isUpdate ? 'PUT' : 'POST';
 
-    const response = await fetch(url, {
+    const response = await axios({
+      url,
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(visitToSync),
+      data: visitToSync,
+      validateStatus: () => true,
     });
 
     if (response.status === 409) {
-      const serverData = await response.json();
+      const serverData = response.data;
       const conflict: SyncConflict = {
         id: uuidv4(),
         entityType: 'visit',
@@ -315,24 +323,26 @@ async function syncVisit(item: SyncQueueItem): Promise<{
       return { success: false, conflict };
     }
 
-    if (!response.ok) {
+    if (response.status < 200 || response.status >= 300) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const serverVisit: Visit = await response.json();
+    const serverResponse = response.data;
+    const serverVisit = serverResponse.data || serverResponse;
 
     // Update local record
     await db.put('visits', {
       ...visit,
-      remoteId: serverVisit.remoteId,
+      remoteId: serverVisit.id || serverVisit.remoteId,
       donorRemoteId: donor.remoteId,
       syncStatus: 'synced',
-      version: serverVisit.version,
+      version: serverVisit.version || 1,
     });
 
     return { success: true };
 
   } catch (error) {
+    console.error('[Sync] syncVisit failed:', error);
     return { success: false };
   }
 }

@@ -16,27 +16,49 @@ export default function NewDonorPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError(null);
+    setFieldErrors({});
 
     const formData = new FormData(e.currentTarget);
     
+    // Client-side validation for API-required fields
+    const errors: Record<string, string> = {};
+    const nationalId = formData.get('nationalId') as string;
+    const dateOfBirth = formData.get('dateOfBirth') as string;
+    const gender = formData.get('gender') as string;
+    const bloodType = formData.get('bloodType') as string;
+    const phone = formData.get('phone') as string;
+
+    if (!nationalId?.trim()) errors.nationalId = 'national id مطلوب إدخاله.';
+    if (!dateOfBirth) errors.dateOfBirth = 'date of birth مطلوب إدخاله.';
+    if (!gender) errors.gender = 'gender مطلوب إدخاله.';
+    if (!bloodType) errors.bloodType = 'blood type مطلوب إدخاله.';
+    if (!phone?.trim()) errors.phone = 'رقم الهاتف مطلوب إدخاله.';
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       // Generate donor number
       const donorNumber = `DON-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
 
       const donorData = {
         donorNumber,
-        nationalId: formData.get('nationalId') as string,
+        nationalId,
         firstName: formData.get('firstName') as string,
         lastName: formData.get('lastName') as string,
-        dateOfBirth: formData.get('dateOfBirth') as string,
-        gender: formData.get('gender') as Gender,
-        bloodType: formData.get('bloodType') as BloodType,
-        phone: formData.get('phone') as string,
+        dateOfBirth,
+        gender: gender as Gender,
+        bloodType: bloodType as BloodType,
+        phone,
         email: formData.get('email') as string,
         address: formData.get('address') as string,
         city: formData.get('city') as string,
@@ -103,12 +125,11 @@ export default function NewDonorPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Last Name *
+                  Last Name
                 </label>
                 <input
                   type="text"
                   name="lastName"
-                  required
                   className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none"
                   placeholder="Doe"
                 />
@@ -120,10 +141,12 @@ export default function NewDonorPage() {
                 <input
                   type="text"
                   name="nationalId"
-                  required
-                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none"
+                  className={`w-full px-4 py-2 bg-slate-900 border rounded-lg focus:border-blue-500 focus:outline-none ${fieldErrors.nationalId ? 'border-red-500' : 'border-slate-600'}`}
                   placeholder="1234567890"
                 />
+                {fieldErrors.nationalId && (
+                  <p className="text-red-400 text-sm mt-1">{fieldErrors.nationalId}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -132,9 +155,11 @@ export default function NewDonorPage() {
                 <input
                   type="date"
                   name="dateOfBirth"
-                  required
-                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none"
+                  className={`w-full px-4 py-2 bg-slate-900 border rounded-lg focus:border-blue-500 focus:outline-none ${fieldErrors.dateOfBirth ? 'border-red-500' : 'border-slate-600'}`}
                 />
+                {fieldErrors.dateOfBirth && (
+                  <p className="text-red-400 text-sm mt-1">{fieldErrors.dateOfBirth}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -142,14 +167,16 @@ export default function NewDonorPage() {
                 </label>
                 <select
                   name="gender"
-                  required
-                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none"
+                  className={`w-full px-4 py-2 bg-slate-900 border rounded-lg focus:border-blue-500 focus:outline-none ${fieldErrors.gender ? 'border-red-500' : 'border-slate-600'}`}
                 >
                   <option value="">Select gender</option>
                   {genders.map(g => (
                     <option key={g} value={g}>{g.charAt(0).toUpperCase() + g.slice(1)}</option>
                   ))}
                 </select>
+                {fieldErrors.gender && (
+                  <p className="text-red-400 text-sm mt-1">{fieldErrors.gender}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -157,14 +184,16 @@ export default function NewDonorPage() {
                 </label>
                 <select
                   name="bloodType"
-                  required
-                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none"
+                  className={`w-full px-4 py-2 bg-slate-900 border rounded-lg focus:border-blue-500 focus:outline-none ${fieldErrors.bloodType ? 'border-red-500' : 'border-slate-600'}`}
                 >
                   <option value="">Select blood type</option>
                   {bloodTypes.map(bt => (
                     <option key={bt} value={bt}>{bt}</option>
                   ))}
                 </select>
+                {fieldErrors.bloodType && (
+                  <p className="text-red-400 text-sm mt-1">{fieldErrors.bloodType}</p>
+                )}
               </div>
             </div>
           </div>
@@ -180,10 +209,12 @@ export default function NewDonorPage() {
                 <input
                   type="tel"
                   name="phone"
-                  required
-                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none"
+                  className={`w-full px-4 py-2 bg-slate-900 border rounded-lg focus:border-blue-500 focus:outline-none ${fieldErrors.phone ? 'border-red-500' : 'border-slate-600'}`}
                   placeholder="+1 234 567 8900"
                 />
+                {fieldErrors.phone && (
+                  <p className="text-red-400 text-sm mt-1">{fieldErrors.phone}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -198,24 +229,22 @@ export default function NewDonorPage() {
               </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Address *
+                  Address 
                 </label>
                 <input
                   type="text"
                   name="address"
-                  required
                   className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none"
                   placeholder="123 Main Street"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  City *
+                  City    
                 </label>
                 <input
                   type="text"
                   name="city"
-                  required
                   className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg focus:border-blue-500 focus:outline-none"
                   placeholder="New York"
                 />

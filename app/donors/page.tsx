@@ -16,12 +16,19 @@ export default function DonorsPage() {
 
   useEffect(() => {
     loadDonors();
+
+    // Poll every 3 seconds to catch new donors and sync status changes
+    const interval = setInterval(() => {
+      loadDonors();
+    }, 3000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const loadDonors = async () => {
     try {
       const data = await getAllDonors();
-      setDonors(data.sort((a, b) => b.createdAt - a.createdAt));
+      setDonors([...data].sort((a, b) => b.createdAt - a.createdAt));
     } catch (error) {
       console.error('Failed to load donors:', error);
     } finally {
