@@ -212,6 +212,21 @@ export default function DonorsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <SyncStatusBadge status={donor.syncStatus} size="sm" />
+                      {donor.syncError && (
+                        <div className="mt-1 text-xs text-red-400 max-w-[200px] truncate" title={donor.syncError}>
+                          {donor.syncError}
+                        </div>
+                      )}
+                      {donor.syncStatus === 'failed' && (
+                        <div className="mt-2 flex gap-2">
+                          <Link
+                            href={`/donors/${donor.localId}/edit`}
+                            className="text-xs px-2 py-1 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 rounded transition-colors"
+                          >
+                            Edit
+                          </Link>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-slate-300">{donor.totalDonations}</div>

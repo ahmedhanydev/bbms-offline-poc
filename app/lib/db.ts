@@ -110,7 +110,8 @@ export async function updateDonor(localId: string, updates: Partial<Donor>): Pro
     localId, // Ensure localId doesn't change
     updatedAt: Date.now(),
     version: existing.version + 1,
-    syncStatus: existing.syncStatus === 'synced' ? 'pending' : existing.syncStatus,
+    // Respect explicit syncStatus in updates, otherwise auto-bump synced→pending
+    syncStatus: updates.syncStatus ?? (existing.syncStatus === 'synced' ? 'pending' : existing.syncStatus),
   };
 
   await db.put('donors', updated);
@@ -217,7 +218,7 @@ export async function updateVisit(localId: string, updates: Partial<Visit>): Pro
     localId,
     updatedAt: Date.now(),
     version: existing.version + 1,
-    syncStatus: existing.syncStatus === 'synced' ? 'pending' : existing.syncStatus,
+    syncStatus: updates.syncStatus ?? (existing.syncStatus === 'synced' ? 'pending' : existing.syncStatus),
   };
 
   await db.put('visits', updated);

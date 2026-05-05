@@ -17,6 +17,7 @@ export interface Donor {
   localId: string;           // UUID generated locally
   remoteId: number | null;     // Server-assigned ID after sync
   syncStatus: SyncStatus;
+  syncError?: string;          // Last sync error message (for failed items)
   createdAt: number;           // Unix timestamp (ms)
   updatedAt: number;         // Unix timestamp (ms)
   version: number;           // For conflict detection
@@ -51,6 +52,7 @@ export interface Visit {
   donorLocalId: string;      // FK to local donor
   donorRemoteId: number | null; // FK to remote donor (after donor syncs)
   syncStatus: SyncStatus;
+  syncError?: string;
   createdAt: number;
   updatedAt: number;
   version: number;

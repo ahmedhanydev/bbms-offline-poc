@@ -326,26 +326,36 @@ async function syncDonor(item: SyncQueueItem): Promise<{
     }
 
     if (response.status < 200 || response.status >= 300) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      // Try to extract validation errors from API response
+      const body = response.data || {};
+      let errorMsg = body.message || `HTTP ${response.status}: ${response.statusText}`;
+      if (body.errors && typeof body.errors === 'object') {
+        const fieldErrors = Object.entries(body.errors)
+          .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+          .join(' | ');
+        if (fieldErrors) errorMsg = fieldErrors;
+      }
+      throw new Error(errorMsg);
     }
 
     const serverResponse = response.data;
     const serverDonor = serverResponse.data || serverResponse;
     
-    // Update local record with server data
-    // API uses 'id' as remoteId, and response may not have 'version'
+    // Update local record with server data and clear any previous sync error
     await db.put('donors', {
       ...donor,
       remoteId: serverDonor.id || serverDonor.remoteId,
       syncStatus: 'synced',
+      syncError: undefined,
       version: serverDonor.version || 1,
     });
 
     return { success: true };
 
   } catch (error) {
-    console.error('[Sync] syncDonor failed:', error);
-    return { success: false };
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('[Sync] syncDonor failed:', errorMsg);
+    throw new Error(errorMsg);
   }
 }
 
@@ -434,16 +444,16 @@ async function handleSyncFailure(item: SyncQueueItem, error: string): Promise<vo
       lastError: error,
     });
 
-    // Update entity status
+    // Update entity status and error
     if (item.entityType === 'donor') {
       const donor = await getDonor(item.localId);
       if (donor) {
-        await updateDonor(item.localId, { syncStatus: 'failed' });
+        await updateDonor(item.localId, { syncStatus: 'failed', syncError: error });
       }
     } else {
       const visit = await getVisit(item.localId);
       if (visit) {
-        await updateVisit(item.localId, { syncStatus: 'failed' });
+        await updateVisit(item.localId, { syncStatus: 'failed', syncError: error });
       }
     }
   } else {
